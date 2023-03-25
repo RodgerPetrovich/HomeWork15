@@ -4,68 +4,139 @@
 
 Chat::Chat() {
   
-    for (int i = 0; i < SIZE; i++)
-    {
-        data[i] = nullptr;
-    }
     data_count = 0;
+    memSize = SIZE;
+    data = new AuthData[memSize];
+   
 }
-int Chat::hashLogin(string _login)
+Chat::~Chat()
 {
-    int ha = 0;
+    delete[] data;
+}
+int Chat::hashLogin(string _login, int i)
+{
+    int sum = 0;
     for (int i = 0; i < _login.size(); i++)
     {
-        ha += _login[i];
+        sum += _login[i];
     }
-    
-    return ha % SIZE;
+       
+    return (sum % memSize + i * i) % memSize;
 }
-void Chat::reg(string _login, string pass) {
-    uint* x = sha1(pass);
-    AuthData* newUser = new AuthData(_login,x);
-    if (!data[hashLogin(_login)])
-        data[hashLogin(_login)] = newUser;
-    else
-    {
-        
-        AuthData* curent = data[hashLogin(_login)];
-        while (curent->next)
-        {
-            curent = curent->next;
-        }
-        curent->next = newUser;
-        
 
-    }
-    data_count++;
-    cout << "login - " << _login << " registered in slot "<< hashLogin(_login)<<" with passhash - " << *x << endl;
-}
-bool Chat::login(string _login, string pass) {
-    
-   // int ha = hashLogin(_login);
-    AuthData* curent = data[hashLogin(_login)];
-    while (curent)
+void Chat::deleteUser(string _login)
+{
+    int index = -1;
+    for (int i = 0; i < memSize; i++)
     {
-        if (curent->login == _login) {
-            
+        index = hashLogin(_login, i);
+        if (data[index].status == userSlotStatus::engaged && data[index].login == _login)
+        {
+            data[index].login = "";
+            data[index].pass_sha1_hash = 0;
+            data[index].status = userSlotStatus::deleted;
+            cout << "user " << _login << " is deleted" << endl;
+            data_count--;
+            return;
+            }
+    }
+    cout << "user " << _login << " not find" << endl;
+}
+
+void Chat::resize()
+{
+    AuthData* newData = data;
+   
+    int oldMem = memSize;
+    memSize *= 2;
+    data = new AuthData[memSize];
+    data_count = 0;
+    
+    for (int i = 0; i < oldMem; i++)
+    {
+        if (newData[i].status == userSlotStatus::engaged)
+        {
+            reg(newData[i].login, newData[i].pass_sha1_hash);
+        }
+    }
+    
+}
+
+void Chat::reg(string _login, string pass) {
+    uint* passHash = sha1(pass);
+    int index = -1, i = 0;
+
+   
+
+    for (; i < memSize; i++)
+    {
+        index = hashLogin(_login, i);
+        if (data[index].status == userSlotStatus::engaged && data[index].login == _login)
+        {
+            cout << "login "<< _login<<" is busy" << endl;
+            return;
+        }
+        if (data[index].status != userSlotStatus::engaged)
+        {
             break;
         }
-        curent = curent->next;
     }
-    if (!curent)
+  
+        if (i >= memSize)
+        {
+            resize();
+            cout << "ARRAY RESIZED" << endl;
+            reg(_login, pass);
+            return;
+        }
+        data[index] = AuthData(_login, passHash);
+        cout << "user " << _login << " add to chat" << endl;
+       
+    data_count++;
+    
+}
+
+void Chat::showUsers()
+{
+    for (int i = 0; i < memSize; i++)
     {
-        cout << "no login - " << _login << " in base " << endl;
-        return false;
+        if (data[i].status == userSlotStatus::engaged)
+            cout << "login - " << data[i].login << ", num in array - " << i << ", passHash - " << data[i].pass_sha1_hash << endl;
+    }
+}
+
+void Chat::reg(string _login, uint* ph) {
+    uint* passHash = ph;
+    int index = -1, i = 0;
+    for (; i < memSize; i++)
+    {
+        index = hashLogin(_login, i);
+        if (data[index].status != userSlotStatus::engaged)
+        {
+            break;
+        }
     }
 
-    uint* digest = sha1(pass);
+    if (i > memSize)
+    {
+        return;
+    }
+    data[index] = AuthData(_login, passHash);
+   
+    data_count++;
 
-    bool cmpHashes = !memcmp(
-        curent->pass_sha1_hash,
-        digest,
-        SHA1HASHLENGTHBYTES);
-    delete[] digest;
-    if (cmpHashes)cout << "Login - " << _login << " enter!" << endl;
-    else cout << "Login - " << _login << " password fail!" << endl;
-    return cmpHashes;
+}
+
+bool Chat::login(string _login, string pass) {
+    
+    int index = -1, i = 0;
+    uint* passHash = sha1(pass);
+    for (i; i < memSize; i++)
+    {
+        index = hashLogin(_login, i);
+        if (data[index].login == _login && data[index].pass_sha1_hash == passHash)
+            return true;
+    }
+    return false;
+    
 }
